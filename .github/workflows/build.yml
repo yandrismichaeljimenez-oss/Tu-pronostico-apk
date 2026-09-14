@@ -5,14 +5,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create Android project
+      
+      - name: Create project
         run: |
           mkdir -p app/src/main/java/com/tupronosticos/app
-          mkdir -p gradle/wrapper
-          echo "include ':app'" > settings.gradle
-          echo "plugins { id 'com.android.application' version '8.2.0' apply false }" > build.gradle
+          cat > settings.gradle <<'EOF'
+          include ':app'
+          EOF
+
+          cat > build.gradle <<'EOF'
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:8.2.0' }
+          }
+          allprojects {
+              repositories { google(); mavenCentral() }
+          }
+          EOF
+
           cat > app/build.gradle <<'EOF'
-          plugins { id 'com.android.application' }
+          apply plugin: 'com.android.application'
           android {
               namespace 'com.tupronosticos.app'
               compileSdk 34
@@ -24,13 +36,13 @@ jobs:
                   versionName "1.0"
               }
           }
-          dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
+
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
-              <application android:allowBackup="true" android:label="Tu Pronosticos" android:theme="@android:style/Theme.NoTitleBar">
+              <application android:allowBackup="true" android:label="Tu Pronosticos">
                   <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
@@ -40,23 +52,22 @@ jobs:
               </application>
           </manifest>
           EOF
+
           cat > app/src/main/java/com/tupronosticos/app/MainActivity.java <<'EOF'
           package com.tupronosticos.app;
+          import android.app.Activity;
           import android.os.Bundle;
-          import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
-          import androidx.appcompat.app.AppCompatActivity;
-          public class MainActivity extends AppCompatActivity {
+          public class MainActivity extends Activity {
               private WebView webView;
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   webView = new WebView(this);
                   setContentView(webView);
-                  WebSettings s = webView.getSettings();
-                  s.setJavaScriptEnabled(true);
-                  s.setDomStorageEnabled(true);
+                  webView.getSettings().setJavaScriptEnabled(true);
+                  webView.getSettings().setDomStorageEnabled(true);
                   webView.setWebViewClient(new WebViewClient());
                   webView.loadUrl("https://tu-pronosticos.tiiny.site");
               }
@@ -67,5 +78,21 @@ jobs:
               }
           }
           EOF
-          echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
-          echo "distributionPath=wrapper/dists" >> gradle/wrapper
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build APK
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          gradle :app:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tu-Pronosticos-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
